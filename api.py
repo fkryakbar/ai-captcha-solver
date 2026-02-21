@@ -89,7 +89,8 @@ async def solve_captcha(req: SolveRequest, request: Request, api_key: str | None
     if not req.url:
         # Use localhost unconditionally so the headless docker container doesn't need to try routing
         # out to the public internet/external IP to hit its own local_captcha endpoint.
-        base_url = "http://127.0.0.1:8000"
+        # MUST use localhost as reCAPTCHA domain validation whitelists localhost but blocks 127.0.0.1
+        base_url = "http://localhost:8000"
         target_url = f"{base_url}/local_captcha?sitekey={req.sitekey}"
         if req.siteurl:
             import urllib.parse
