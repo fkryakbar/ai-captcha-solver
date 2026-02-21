@@ -54,6 +54,18 @@ The tool can solve the following CAPTCHA types found on the `2captcha.com/demo/`
     GOOGLE_API_KEY="..."
     ```
 
+### Quick Start with Docker
+If you'd rather bypass manual installation (like geckodriver) you can directly spin up the containerized app with Docker Compose:
+
+1. **Set your `.env`:**
+   Ensure you've created your `.env` file per step 3.
+
+2. **Run with Docker Compose:**
+   ```bash
+   docker-compose up -d --build
+   ```
+   The application will become available locally mapped on `http://localhost:8000`.
+
 ## Usage
 
 The primary script for running the solver is `main.py`. You need to specify the CAPTCHA type to test. You can also specify the AI provider and model.

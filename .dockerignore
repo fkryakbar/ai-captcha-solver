@@ -1,0 +1,12 @@
+.env
+__pycache__/
+screenshots/
+*.pyc
+.git/
+.github/
+docker-compose.yml
+Dockerfile
+README.md
+task.md
+implementation_plan.md
+walkthrough.md
