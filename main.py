@@ -102,20 +102,25 @@ def average_of_array(arr):
 
 def check_tile_for_object(args):
     """Helper function for ThreadPoolExecutor to call the correct AI provider for a single tile."""
-    tile_index, tile_path, object_name, provider, model = args
+    tile_index, tile_path, object_name, provider, model, log_cb = args
     
+    def log(msg):
+        print(msg)
+        if log_cb: log_cb(msg)
+        
     try:
         decision_str = ''
+        tokens_used = 0
         if provider == 'openai':
             decision_str = ask_if_tile_contains_object_chatgpt(tile_path, object_name, model)
         else: # gemini
-            decision_str = ask_if_tile_contains_object_gemini(tile_path, object_name, model)
+            decision_str, tokens_used = ask_if_tile_contains_object_gemini(tile_path, object_name, model)
         
-        print(f"Tile {tile_index}: Does it contain '{object_name}'? AI says: {decision_str}")
-        return tile_index, decision_str == 'true'
+        log(f"Tile {tile_index}: Does it contain '{object_name}'? AI says: {decision_str}")
+        return tile_index, decision_str == 'true', tokens_used
     except Exception as e:
         print(f"Error checking tile {tile_index}: {e}")
-        return tile_index, False
+        return tile_index, False, 0
 
 def audio_test(file_path='files/audio.mp3', provider='gemini', model=None):
     """Transcribes a local audio file using the specified AI provider."""
@@ -414,6 +419,191 @@ def recaptcha_v2_test(driver, provider='openai', model=None):
         except Exception:
             pass
         return 0
+
+def solve_recaptcha_v2_for_api(driver, target_url, provider='openai', model=None, log_cb=None):
+    """
+    Solves a single reCAPTCHA v2 instance on the target URL and extracts the token.
+    Returns tracking info on success, None on failure.
+    """
+    def log(msg):
+        print(msg)
+        if log_cb: log_cb(msg)
+            
+    log(f"Opening target URL: {target_url}")
+    driver.get(target_url)
+    
+    screenshot_paths = []
+    total_tokens_used = 0
+    try:
+        # Wait a bit for page to load fully
+        time.sleep(3)
+        # --- Start the challenge ---
+        recaptcha_frame = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//iframe[@title='reCAPTCHA']")))
+        driver.switch_to.frame(recaptcha_frame)
+        WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "recaptcha-checkbox-border"))).click()
+        driver.switch_to.default_content()
+        time.sleep(2)
+
+        # --- Loop to solve image challenges as long as they appear ---
+        MAX_CHALLENGE_ATTEMPTS = 5
+        clicked_tile_indices = set()
+        last_object_name = ""
+        num_last_clicks = 0
+        for attempt in range(MAX_CHALLENGE_ATTEMPTS):
+            log(f"\nreCAPTCHA image challenge attempt {attempt + 1}/{MAX_CHALLENGE_ATTEMPTS}...")
+            
+            # --- Check if a puzzle is present ---
+            try:
+                challenge_iframe = WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.XPATH, "//iframe[contains(@title, 'recaptcha challenge expires in two minutes')]")))
+                driver.switch_to.frame(challenge_iframe)
+            except Exception:
+                log("No new image challenge found. Captcha likely solved.")
+                break # Exit the loop
+
+            # --- If puzzle is found, solve it ---
+            instruction_element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "rc-imageselect-instructions")))
+            instruction_screenshot_path = f'screenshots/recaptcha_instruction_{attempt + 1}.png'
+            instruction_element.screenshot(instruction_screenshot_path)
+            screenshot_paths.append(instruction_screenshot_path)
+            
+            object_name = ''
+            if provider == 'openai':
+                object_name = ask_recaptcha_instructions_to_chatgpt(instruction_screenshot_path, model)
+            else: # gemini
+                object_name, tokens = ask_recaptcha_instructions_to_gemini(instruction_screenshot_path, model)
+                total_tokens_used += tokens
+            log(f"AI identified the target object as: '{object_name}'")
+
+            is_new_object = object_name.lower() != last_object_name.lower()
+            if is_new_object:
+                log(f"New challenge object detected ('{object_name}'). Resetting clicked tiles.")
+                clicked_tile_indices = set()
+                last_object_name = object_name
+            elif num_last_clicks >= 3:
+                log("Previously clicked 3 or more tiles, assuming a new challenge. Resetting clicked tiles.")
+                clicked_tile_indices = set()
+            else:
+                log("Same challenge object and < 3 tiles clicked previously. Will not re-click already selected tiles.")
+
+            table = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//table[contains(@class, 'rc-imageselect-table')]")))
+            all_tiles = table.find_elements(By.TAG_NAME, "td")
+            
+            tile_paths = []
+            for i, tile in enumerate(all_tiles):
+                tile_path = f'screenshots/tile_{attempt + 1}_{i}.png'
+                tile.screenshot(tile_path)
+                screenshot_paths.append(tile_path)
+                tile_paths.append(tile_path)
+
+            tasks = [(i, path, object_name, provider, model, log_cb) for i, path in enumerate(tile_paths)]
+            tiles_to_click_this_round = []
+            with ThreadPoolExecutor(max_workers=len(all_tiles)) as executor:
+                results = executor.map(check_tile_for_object, tasks)
+                for tile_index, should_click, tokens in results:
+                    total_tokens_used += tokens
+                    if should_click:
+                        tiles_to_click_this_round.append(tile_index)
+
+            current_attempt_tiles = set(tiles_to_click_this_round)
+            new_tiles_to_click = current_attempt_tiles - clicked_tile_indices
+            num_last_clicks = len(new_tiles_to_click)
+
+            log(f"\nAI identified tiles for clicking: {sorted(list(current_attempt_tiles))}")
+            log(f"Already clicked tiles: {sorted(list(clicked_tile_indices))}")
+            log(f"Clicking {len(new_tiles_to_click)} new tiles...")
+            
+            for i in sorted(list(new_tiles_to_click)):
+                try:
+                    if all_tiles[i].is_displayed() and all_tiles[i].is_enabled():
+                        all_tiles[i].click()
+                        time.sleep(random.uniform(0.2, 0.5))
+                except Exception as e:
+                    log(f"Could not click tile {i}, it might be already selected or disabled. Error: {e}")
+            
+            clicked_tile_indices.update(new_tiles_to_click)
+
+            try:
+                verify_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "recaptcha-verify-button")))
+                verify_button.click()
+                time.sleep(1.5) # Wait for state change
+
+                # After clicking, check if the button is now disabled, which indicates success
+                verify_button_after_click = driver.find_element(By.ID, "recaptcha-verify-button")
+                if verify_button_after_click.get_attribute("disabled"):
+                    log("Verify button is disabled. Image challenge passed.")
+                    driver.switch_to.default_content()
+                    log("reCAPTCHA v2 image challenge solved!")
+                    break
+                else:
+                    # This case handles "check new images" - we just let the loop continue
+                    log("Verify button still active, likely a new challenge was served.")
+
+            except Exception:
+                log("Verify button not found after clicking tiles, assuming challenge is complete.")
+                break # Exit the loop to the final extraction step
+
+            driver.switch_to.default_content()
+            time.sleep(2)
+        else:
+            log("Image challenge still present after max attempts.")
+            return None
+
+        driver.switch_to.default_content()
+        time.sleep(1)
+        
+        # --- Extract token ---
+        # The universal way to extract standard reCAPTCHA v2 response token
+        log("Extracting token from page...")
+        # First try grecaptcha API
+        try:
+            token = driver.execute_script("return (typeof grecaptcha !== 'undefined') ? grecaptcha.getResponse() : null;")
+            if token:
+                log("Extracted token via grecaptcha Object!")
+                return token, total_tokens_used
+        except Exception:
+            pass
+            
+        # Fallback to hidden textarea
+        try:
+            textarea = driver.find_element(By.ID, "g-recaptcha-response")
+            token = textarea.get_attribute("value")
+            if token:
+                log("Extracted token via hidden textarea!")
+                return token, total_tokens_used
+        except Exception:
+            pass
+            
+        # Fallback for localhost (our HTML)
+        try:
+            token_display = driver.find_element(By.ID, "tokenDisplay")
+            token = token_display.text
+            if token:
+                log("Extracted token via local custom HTML tokenDisplay!")
+                return token, total_tokens_used
+        except Exception:
+            pass
+
+        log("Failed to easily extract token from page. It might be solved but we couldn't get the token.")
+        return None, total_tokens_used
+    
+    except Exception as ex:
+        log(f"An error occurred during API reCAPTCHA v2 test: {ex}. Marking as failed.")
+        traceback.print_exc()
+        try:
+            driver.switch_to.default_content()
+        except Exception:
+            pass
+        return None, total_tokens_used
+    
+    finally:
+        # Clean up screenshots after execution
+        log("Cleaning up temporary screenshot files...")
+        for path in screenshot_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception as cleanup_err:
+                log(f"Failed to delete {path}: {cleanup_err}")
 
 def main():
     parser = argparse.ArgumentParser(description="Test various captcha types.")

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>reCAPTCHA v2 Test</title>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        #tokenDisplay.show {
+            display: block;
+        }
+        h1 {
+            color: #1a1a2e;
+            margin-bottom: 10px;
+            font-size: 1.5rem;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+        .captcha-wrapper {
+            display: flex;
+            justify-content: center;
+            margin: 30px 0;
+        }
+        .token-section {
+            margin-top: 20px;
+        }
+        .token-section h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+        #tokenDisplay {
+            background: #1a1a2e;
+            color: #4ade80;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            word-break: break-all;
+            max-height: 150px;
+            overflow-y: auto;
+            display: none;
+        }
+        #tokenDisplay.show {
+            display: block;
+        }
+        .copy-btn {
+            margin-top: 10px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.3s;
+            display: none;
+        }
+        .copy-btn.show {
+            display: inline-block;
+        }
+        .copy-btn:hover {
+            background: #4338ca;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .status.waiting {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .info-box {
+            background: #f0f9ff;
+            border-left: 4px solid #0ea5e9;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.85rem;
+        }
+        .info-box code {
+            background: #e0f2fe;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 reCAPTCHA v2 Test</h1>
+        <p class="subtitle">AI Captcha Bypass Local Server</p>
+        
+        <div id="status" class="status waiting">
+            ⏳ Menunggu verifikasi captcha...
+        </div>
+
+        <div class="captcha-wrapper">
+            <!-- reCAPTCHA v2 Widget -->
+            <div class="g-recaptcha" 
+                 data-sitekey="{{ sitekey }}"
+                 data-callback="onCaptchaSuccess"
+                 data-expired-callback="onCaptchaExpired"
+                 data-error-callback="onCaptchaError">
+            </div>
+        </div>
+
+        <div class="token-section">
+            <h3>📋 Token reCAPTCHA:</h3>
+            <div id="tokenDisplay"></div>
+            <button class="copy-btn" id="copyBtn" onclick="copyToken()">
+                📋 Copy Token
+            </button>
+        </div>
+
+        <div class="info-box">
+            <strong>ℹ️ Catatan:</strong><br>
+            • Token valid selama <code>~2 menit</code><br>
+            • Token hanya bisa digunakan <code>1x</code><br>
+            • Jika domain error, gunakan <code>hosts file</code> manipulation
+        </div>
+    </div>
+
+    <script>
+        // Apply custom siteurl if provided for testing
+        const siteurl = "{{ siteurl }}";
+        if (siteurl && siteurl !== 'None') {
+            try {
+                // Modify base href to simulate origin
+                let base = document.createElement("base");
+                base.href = siteurl;
+                document.head.appendChild(base);
+                console.log("Simulating origin:", siteurl);
+            } catch (e) {
+                console.log("Failed to simulate origin:", e);
+            }
+        }
+
+        let currentToken = '';
+
+        function onCaptchaSuccess(token) {
+            currentToken = token;
+            
+            // Update status
+            const status = document.getElementById('status');
+            status.className = 'status success';
+            status.innerHTML = '✅ Captcha berhasil diverifikasi!';
+            
+            // Show token
+            const tokenDisplay = document.getElementById('tokenDisplay');
+            tokenDisplay.textContent = token;
+            tokenDisplay.classList.add('show');
+            
+            // Show copy button
+            document.getElementById('copyBtn').classList.add('show');
+            
+            console.log('='.repeat(50));
+            console.log('reCAPTCHA TOKEN:');
+            console.log('='.repeat(50));
+            console.log(token);
+            console.log('='.repeat(50));
+        }
+
+        function onCaptchaExpired() {
+            currentToken = '';
+            
+            const status = document.getElementById('status');
+            status.className = 'status waiting';
+            status.innerHTML = '⏳ Token expired, silakan verifikasi ulang...';
+            
+            document.getElementById('tokenDisplay').classList.remove('show');
+            document.getElementById('copyBtn').classList.remove('show');
+        }
+
+        function onCaptchaError() {
+            const status = document.getElementById('status');
+            status.className = 'status error';
+            status.innerHTML = '❌ Error: Domain tidak diizinkan atau sitekey invalid';
+        }
+
+        function copyToken() {
+            if (currentToken) {
+                navigator.clipboard.writeText(currentToken).then(() => {
+                    const btn = document.getElementById('copyBtn');
+                    btn.textContent = '✅ Copied!';
+                    setTimeout(() => {
+                        btn.textContent = '📋 Copy Token';
+                    }, 2000);
+                });
+            }
+        }
+    </script>
+</body>
+</html>

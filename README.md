@@ -94,6 +94,85 @@ python main.py audio --file files/radio.wav --provider openai
 python main.py puzzle --provider openai --model gpt-4o
 ```
 
+### Starting the HTTP API Server
+
+You can also run this project as an HTTP API service. This is particularly useful for automated CAPTCHA bypassing from other applications.
+
+**1. Start the server (requires uvicorn):**
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+**2. API Endpoint (`POST /api/solve`):**
+
+The API requires the `x-api-key` header matching the `API_KEY` defined in your `.env` file (if you configured it).
+
+**Request Body (JSON):**
+```json
+{
+  "sitekey": "6LfbiegZAAAAAHQtVhER...",
+  "url": "https://example.com/login",
+  "siteurl": "https://example.com/login",
+  "model": "gemini-2.5-flash"
+}
+```
+
+*Note on `url` & `siteurl`*: 
+- Both `url` and `siteurl` are optional.
+- If `url` is provided, the solver will navigate directly to that page to solve the CAPTCHA.
+- If `url` is **omitted**, the API will start a local HTML page populated with the provided `sitekey`.
+- If `siteurl` is provided alongside a missing `url`, the local HTML template will simulate running on that specific host domain (e.g. `https://example.com/`) to prevent ReCaptcha domain validation errors.
+
+*Note on `model` & `stream`*: 
+- `model` (optional): Must be a Gemini model. If omitted, the solver will use the `GEMINI_MODEL` configured in `.env` (defaults to `gemini-2.5-flash`).
+- `stream` (optional): If set to `true`, the API will return a `text/event-stream` format containing realtime logs of the headless browser's resolution process. Defaults to `false`.
+
+**Example Request (Local Fallback with Custom Site URL):**
+```bash
+curl -X POST http://localhost:8000/api/solve \
+     -H "Content-Type: application/json" \
+     -H "x-api-key: your_api_key_here" \
+     -d '{
+          "sitekey": "6LeIxAc...", 
+          "siteurl": "https://example.com/",
+          "model": "gemini-2.5-flash",
+          "stream": false
+         }'
+```
+
+**Standard Response (`stream: false`):**
+```json
+{
+  "status": "success",
+  "token": "03AFcWeA4...",
+  "total_tokens_used": 1420
+}
+```
+
+**Streaming Response (`stream: true`):**
+When `stream: true`, the API will chunk messages in Server-Sent Event format (`data: {...}\n\n`).
+```text
+data: {"type": "progress", "message": "Opening target URL: https://example.com/"}
+data: {"type": "progress", "message": "reCAPTCHA image challenge attempt 1/5..."}
+**Standard Response (`stream: false`):**
+```json
+{
+  "status": "success",
+  "token": "03AFcWeA4...",
+  "total_tokens_used": 1420
+}
+```
+
+**Streaming Response (`stream: true`):**
+When `stream: true`, the API will chunk messages in Server-Sent Event format (`data: {...}\n\n`).
+```text
+data: {"type": "progress", "message": "Opening target URL: https://example.com/"}
+data: {"type": "progress", "message": "reCAPTCHA image challenge attempt 1/5..."}
+data: {"type": "progress", "message": "Verify button is disabled. Image challenge passed."}
+data: {"type": "success", "token": "03AFcWeA4...", "total_tokens_used": 1420}
+```
+
+
 
 
 ## How It Works

@@ -342,7 +342,8 @@ def ask_recaptcha_instructions_to_gemini(image_path, model=None):
     with open(image_path, 'rb') as f: image_bytes = f.read()
     model_to_use = model if model else "gemini-2.5-pro"
     response = gemini_client.models.generate_content(model=model_to_use, contents=[types.Part.from_bytes(data=image_bytes, mime_type='image/png'), prompt])
-    return response.text.strip().lower()
+    token_usage = response.usage_metadata.total_token_count if response.usage_metadata else 0
+    return response.text.strip().lower(), token_usage
 
 def ask_if_tile_contains_object_gemini(image_path, object_name, model=None):
     if not gemini_client: raise Exception("Gemini API key not configured.")
@@ -350,4 +351,5 @@ def ask_if_tile_contains_object_gemini(image_path, object_name, model=None):
     with open(image_path, 'rb') as f: image_bytes = f.read()
     model_to_use = model if model else "gemini-2.5-pro"
     response = gemini_client.models.generate_content(model=model_to_use, contents=[types.Part.from_bytes(data=image_bytes, mime_type='image/png'), prompt])
-    return response.text.strip().lower() 
+    token_usage = response.usage_metadata.total_token_count if response.usage_metadata else 0
+    return response.text.strip().lower(), token_usage

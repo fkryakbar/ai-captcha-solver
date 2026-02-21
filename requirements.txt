@@ -40,3 +40,6 @@ requests
 google-genai
 Pillow==10.4.0
 pynput
+fastapi
+uvicorn
+jinja2
