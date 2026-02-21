@@ -87,8 +87,9 @@ async def solve_captcha(req: SolveRequest, request: Request, api_key: str | None
         
     # 2. Determine target URL
     if not req.url:
-        # Build full URL using request context to ensure host is correct
-        base_url = str(request.base_url).rstrip("/")
+        # Use localhost unconditionally so the headless docker container doesn't need to try routing
+        # out to the public internet/external IP to hit its own local_captcha endpoint.
+        base_url = "http://127.0.0.1:8000"
         target_url = f"{base_url}/local_captcha?sitekey={req.sitekey}"
         if req.siteurl:
             import urllib.parse

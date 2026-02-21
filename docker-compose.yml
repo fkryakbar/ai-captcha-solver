@@ -1,6 +1,6 @@
 services:
   captcha-solver:
-    build: .
+    image: ghcr.io/fkryakbar/ai-captcha-solver:latest
     container_name: ai_captcha_solver
     ports:
       - "8000:8000"
