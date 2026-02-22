@@ -420,6 +420,24 @@ def recaptcha_v2_test(driver, provider='openai', model=None):
             pass
         return 0
 
+def human_click(driver, element):
+    """Simulates a more human-like click using ActionChains with random offsets."""
+    try:
+        size = element.size
+        width, height = size['width'], size['height']
+        x_offset = random.randint(-width // 4, width // 4) if width >= 10 else 0
+        y_offset = random.randint(-height // 4, height // 4) if height >= 10 else 0
+        
+        action = ActionChains(driver)
+        action.move_to_element_with_offset(element, x_offset, y_offset)
+        action.pause(random.uniform(0.1, 0.3))
+        action.click()
+        action.perform()
+        time.sleep(random.uniform(0.1, 0.4))
+    except Exception as e:
+        element.click()
+        time.sleep(random.uniform(0.2, 0.5))
+
 def solve_recaptcha_v2_for_api(driver, target_url, provider='openai', model=None, log_cb=None):
     """
     Solves a single reCAPTCHA v2 instance on the target URL and extracts the token.
@@ -440,7 +458,8 @@ def solve_recaptcha_v2_for_api(driver, target_url, provider='openai', model=None
         # --- Start the challenge ---
         recaptcha_frame = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//iframe[@title='reCAPTCHA']")))
         driver.switch_to.frame(recaptcha_frame)
-        WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "recaptcha-checkbox-border"))).click()
+        checkbox = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "recaptcha-checkbox-border")))
+        human_click(driver, checkbox)
         driver.switch_to.default_content()
         time.sleep(2)
 
@@ -515,8 +534,7 @@ def solve_recaptcha_v2_for_api(driver, target_url, provider='openai', model=None
             for i in sorted(list(new_tiles_to_click)):
                 try:
                     if all_tiles[i].is_displayed() and all_tiles[i].is_enabled():
-                        all_tiles[i].click()
-                        time.sleep(random.uniform(0.2, 0.5))
+                        human_click(driver, all_tiles[i])
                 except Exception as e:
                     log(f"Could not click tile {i}, it might be already selected or disabled. Error: {e}")
             
@@ -524,7 +542,7 @@ def solve_recaptcha_v2_for_api(driver, target_url, provider='openai', model=None
 
             try:
                 verify_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "recaptcha-verify-button")))
-                verify_button.click()
+                human_click(driver, verify_button)
                 time.sleep(1.5) # Wait for state change
 
                 # After clicking, check if the button is now disabled, which indicates success
@@ -621,7 +639,12 @@ def main():
         audio_test(args.file, args.provider, args.model)
         return
 
-    driver = webdriver.Firefox()
+    import undetected_chromedriver as uc
+    options = uc.ChromeOptions()
+    options.add_argument("--window-size=1280,720")
+    # For local execution, we don't force headless so you can see the magic, 
+    # but it can be added if needed
+    driver = uc.Chrome(options=options)
     try:
         if args.captcha_type == 'puzzle':
             solve_geetest_puzzle(driver, args.provider)

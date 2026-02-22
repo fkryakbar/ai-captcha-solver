@@ -42,3 +42,5 @@ Pillow==10.4.0
 fastapi
 uvicorn
 jinja2
+undetected-chromedriver==3.5.5
+xvfbwrapper

@@ -346,7 +346,10 @@ def solve_geetest_puzzle(driver, provider='gemini'):
                 print(f"  Error deleting file {f}: {e}")
 
 def main():
-    driver = webdriver.Firefox()
+    import undetected_chromedriver as uc
+    options = uc.ChromeOptions()
+    options.add_argument("--window-size=1280,720")
+    driver = uc.Chrome(options=options)
     try:
         # Example: run with solve_geetest_puzzle(driver, provider='openai')
         solve_geetest_puzzle(driver, provider='gemini')

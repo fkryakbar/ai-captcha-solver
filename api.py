@@ -61,11 +61,16 @@ async def local_captcha(request: Request, sitekey: str, siteurl: str | None = No
 
 def run_solver(target_url: str, provider: str, model: str, log_cb=None):
     import os
+    import undetected_chromedriver as uc
     os.makedirs('screenshots', exist_ok=True)
     
-    options = webdriver.FirefoxOptions()
-    options.add_argument("--headless") # Headless mode enabled
-    driver = webdriver.Firefox(options=options)
+    options = uc.ChromeOptions()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1280,720")
+    
+    driver = uc.Chrome(options=options)
     try:
         # We pass log_cb downwards to stream console logs if necessary
         token, total_tokens = solve_recaptcha_v2_for_api(driver, target_url, provider=provider, model=model, log_cb=log_cb)
